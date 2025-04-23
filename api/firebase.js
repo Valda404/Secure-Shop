@@ -1,16 +1,39 @@
-import admin from 'firebase-admin';
+const FIREBASE_URL =process.env.FIREBASE_PROJECT_ID;
 
-const app = admin.apps.length
-  ? admin.app()
-  : admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n')
-      }),
-      databaseURL: process.env.FIREBASE_PROJECT_ID
-    });
-
+// Fake "admin.database()" wrapper
 export function getDatabase() {
-  return admin.database(app);
+  return {
+    ref(path) {
+      const base = `${FIREBASE_URL}/${path}.json`;
+
+      return {
+        async once(_type) {
+          const res = await fetch(base);
+          const val = await res.json();
+          return { val: () => val };
+        },
+        async set(data) {
+          const res = await fetch(base, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+          });
+          return res.json();
+        },
+        async push() {
+          const newRefUrl = `${FIREBASE_URL}/orders.json`;
+          return {
+            async set(data) {
+              const res = await fetch(newRefUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+              });
+              return res.json();
+            }
+          };
+        }
+      };
+    }
+  };
 }
